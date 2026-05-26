@@ -22,11 +22,13 @@ interface DetailedReport {
     blockProducerCommission: number;
     stakersFeeRate: number;
     equalityFactor: number;
+    totalProducerCommission?: string;
     totalIntervals: number;
     generatedAt: string;
   };
   summary: {
     totalFeesCollected: string;
+    totalProducerCommission?: string;
     totalPostCommissionPool: string;
     totalStakersPool: string;
     totalValidatorPool: string;
@@ -74,6 +76,7 @@ interface TransferFile {
     blockProducerCommission: number;
     stakersFeeRate: number;
     equalityFactor: number;
+    totalProducerCommission: string;
     totalStakersPool: string;
     totalEqualPoolBurn: string;
     generatedAt: string;
@@ -413,8 +416,31 @@ function validateTransferFile(
   }
 
   const reportStakersTotal = parsePOL(detailedReport.summary.totalStakersPool);
+  const reportProducerCommissionTotal = parsePOL(detailedReport.summary.totalProducerCommission ?? '0.0');
   const reportBurnTotal = parsePOL(detailedReport.summary.totalEqualPoolBurn);
   const reportNonValidatorTotal = reportStakersTotal + reportBurnTotal;
+
+  if (typeof transferFile.metadata.totalProducerCommission !== 'string') {
+    errors.push('Transfer file metadata is missing totalProducerCommission');
+  } else {
+    const transferProducerCommissionTotal = parsePOL(transferFile.metadata.totalProducerCommission);
+    const diffProducerCommission = reportProducerCommissionTotal > transferProducerCommissionTotal
+      ? reportProducerCommissionTotal - transferProducerCommissionTotal
+      : transferProducerCommissionTotal - reportProducerCommissionTotal;
+
+    details.push(
+      `Producer Commission: Report ${detailedReport.summary.totalProducerCommission ?? '0.0'} POL, ` +
+      `Transfer ${transferFile.metadata.totalProducerCommission} POL, Diff: ${formatPOL(diffProducerCommission)} POL`
+    );
+
+    if (!almostEqual(reportProducerCommissionTotal, transferProducerCommissionTotal, 1)) {
+      errors.push(
+        `Producer commission mismatch: report shows ${detailedReport.summary.totalProducerCommission ?? '0.0'} POL but ` +
+        `transfer file shows ${transferFile.metadata.totalProducerCommission} POL ` +
+        `(difference: ${formatPOL(diffProducerCommission)} POL)`
+      );
+    }
+  }
 
   let transferStakersTotal: bigint | undefined;
   let transferBurnTotal: bigint | undefined;
